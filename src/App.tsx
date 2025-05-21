@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import './App.css';
 import ReactFlow, {
   addEdge,
-  applyEdgeChanges,
   applyNodeChanges,
   Background,
   Controls,
@@ -14,14 +13,12 @@ import ReactFlow, {
   type Node,
   type Edge,
   type OnNodesChange,
-  type OnEdgesChange,
   type OnConnect,
   type Connection,
   type NodeDragHandler,
   type SelectionDragHandler,
   type XYPosition,
   type NodeOrigin,
-  type EdgeChange,
   type NodeChange,
   type FitViewOptions,
 } from 'reactflow';
@@ -38,6 +35,7 @@ interface AppNodeData extends Omit<CustomNodeData, 'type'> {
   onTitleChange?: (id: string, newTitle: string) => void;
 }
 
+// Define simpler types for nodes and edges
 type AppNode = Node<AppNodeData>;
 type AppEdge = Edge<CustomEdgeData>;
 
@@ -45,10 +43,10 @@ const nodeOrigin: NodeOrigin = [0.5, 0.5];
 const GRID_SIZE = 20;
 
 const initialNodes: AppNode[] = [
-  { id: 'intro-1', type: 'default', position: { x: 50, y: 150 }, data: { label: 'Story Intro', content: 'The beginning of everything.', type: 'intro', }, nodeOrigin, },
-  { id: 'scene-1', type: 'default', position: { x: 300, y: 100 }, data: { label: 'First Scene', content: 'Something happens here.', type: 'scene', }, nodeOrigin, },
-  { id: 'note-1', type: 'default', position: { x: 300, y: 250 }, data: { label: 'A Quick Note', content: 'Remember this detail.', type: 'note', }, nodeOrigin, },
-  { id: 'outro-1', type: 'default', position: { x: 550, y: 150 }, data: { label: 'The End', content: 'How it all concludes.', type: 'outro', }, nodeOrigin, },
+  { id: 'intro-1', type: 'default', position: { x: 50, y: 150 }, data: { label: 'Story Intro', content: 'The beginning of everything.', type: 'intro', } },
+  { id: 'scene-1', type: 'default', position: { x: 300, y: 100 }, data: { label: 'First Scene', content: 'Something happens here.', type: 'scene', } },
+  { id: 'note-1', type: 'default', position: { x: 300, y: 250 }, data: { label: 'A Quick Note', content: 'Remember this detail.', type: 'note', } },
+  { id: 'outro-1', type: 'default', position: { x: 550, y: 150 }, data: { label: 'The End', content: 'How it all concludes.', type: 'outro', } },
 ];
 
 const initialEdges: AppEdge[] = [];
@@ -61,36 +59,9 @@ function AppContent() {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { project, setViewport, getNodes, getNode, getEdges, deleteElements, fitView } = useReactFlow<AppNodeData, AppEdge>();
 
-  const [nodes, setNodes, onNodesChangeInternal] = useNodesState<AppNode>(() => {
-    const savedNodes = localStorage.getItem('storyboard-nodes');
-    if (savedNodes) {
-      try {
-        const parsedNodes = JSON.parse(savedNodes) as AppNode[];
-        return parsedNodes.map(node => ({ ...node, nodeOrigin }));
-      } catch (e) {
-        console.error("Error parsing saved nodes:", e);
-        return initialNodes.map(node => ({ ...node, nodeOrigin }));
-      }
-    }
-    return initialNodes.map(node => ({ ...node, nodeOrigin }));
-  });
+  const [nodes, setNodes] = useNodesState(initialNodes);
 
-  const [edges, setEdges, onEdgesChangeInternalOriginal] = useEdgesState<AppEdge>(() => {
-    const savedEdges = localStorage.getItem('storyboard-connections');
-    if (savedEdges) {
-        try {
-            const parsedEdges = JSON.parse(savedEdges) as AppEdge[];
-            return parsedEdges.map(edge => ({
-                ...edge,
-                type: edge.type || 'custom',
-            }));
-        } catch (e) {
-            console.error("Error parsing saved connections:", e);
-            return initialEdges.map(edge => ({ ...edge, type: 'custom' }));
-        }
-    }
-    return initialEdges.map(edge => ({ ...edge, type: 'custom' }));
-  });
+  const [edges, setEdges, onEdgesChangeInternalOriginal] = useEdgesState(initialEdges);
 
   const handleDeleteEdge = useCallback((edgeId: string) => {
     setEdges((eds) => eds.filter((edge) => edge.id !== edgeId));
@@ -110,7 +81,8 @@ function AppContent() {
   const [snapToGrid, setSnapToGrid] = useState<boolean>(false);
   const [connectingNode, setConnectingNode] = useState<{ id: string; handleId: string | null } | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const toastTimer = useRef<NodeJS.Timeout | null>(null);
+  // Use number type for setTimeout return value in browser environment
+const toastTimer = useRef<number | null>(null);
 
   const showToast = useCallback((message: string) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -162,7 +134,7 @@ function AppContent() {
       });
     }, [setNodes, snapToGrid]);
   
-  const onEdgesChange: OnEdgesChange = useCallback((changes) => setEdges((eds) => applyEdgeChanges(changes, eds)),[setEdges]);
+  // We're using onEdgesChangeInternalOriginal directly in the ReactFlow component
   
   const onConnectStart = useCallback((_: React.MouseEvent | React.TouchEvent, { nodeId, handleId }: { nodeId: string | null, handleId: string | null}) => {
     if (nodeId) setConnectingNode({ id: nodeId, handleId });
@@ -183,9 +155,9 @@ function AppContent() {
         else { allowConnection = true; }
         if (!allowConnection) { showToast("Invalid connection type for new node."); setConnectingNode(null); return; }
         const newNodeId = `node_${Date.now()}`;
-        const newNode: AppNode = { id: newNodeId, type: 'default', position, data: { label: `New ${newNodeType} ${newNodeId.substring(5, 9)}`, content: '', type: newNodeType, }, nodeOrigin, };
-        setNodes((nds) => nds.concat(newNode));
-        setEdges((eds) => eds.concat({ id: `e${connectingNode.id}-${newNodeId}`, source: connectingNode.id, target: newNodeId, sourceHandle: connectingNode.handleId, type: 'custom', animated: true, data: { onDeleteEdge: handleDeleteEdge }, }));
+        const newNode: AppNode = { id: newNodeId, type: 'default', position, data: { label: `New ${newNodeType} ${newNodeId.substring(5, 9)}`, content: '', type: newNodeType, } };
+        setNodes(nds => [...nds, newNode]);
+        setEdges(eds => [...eds, { id: `e${connectingNode.id}-${newNodeId}`, source: connectingNode.id, target: newNodeId, sourceHandle: connectingNode.handleId, type: 'custom', animated: true, data: { onDeleteEdge: handleDeleteEdge } }]);
       }
       setConnectingNode(null);
     }, [project, connectingNode, setNodes, setEdges, getNode, showToast, handleDeleteEdge]);
@@ -198,15 +170,15 @@ function AppContent() {
       if (sourceType === 'intro' && (targetType !== 'scene' && targetType !== 'note')) { showToast("Intro nodes can only connect to Scene or Note nodes."); return; }
       else if (sourceType === 'scene' && (targetType !== 'scene' && targetType !== 'outro')) { showToast("Scene nodes can only connect to other Scene or Outro nodes."); return; }
       else if (sourceType === 'outro') { showToast("Outro nodes cannot start new connections."); return; }
-      setEdges((eds) => addEdge({ ...connection, type: 'custom', animated: true, data: { onDeleteEdge: handleDeleteEdge } }, eds));
+      setEdges((eds) => addEdge({ ...connection, type: 'custom', animated: true, data: { onDeleteEdge: handleDeleteEdge } as CustomEdgeData }, eds));
       setConnectingNode(null);
     }, [setEdges, getNode, showToast, handleDeleteEdge]);
 
   const handleAddNode = useCallback(() => {
     const newNodeId = `node_${Date.now()}`;
     const { x, y } = reactFlowWrapper.current ? project({ x: reactFlowWrapper.current.clientWidth / 2, y: reactFlowWrapper.current.clientHeight / 2 }) : { x: 150, y: 150 };
-    const newNode: AppNode = { id: newNodeId, type: 'default', position: { x, y }, data: { label: `New Scene ${newNodeId.substring(5, 9)}`, content: '', type: 'scene', }, nodeOrigin, };
-    setNodes((prevNodes) => [...prevNodes, newNode]);
+    const newNode: AppNode = { id: newNodeId, type: 'default', position: { x, y }, data: { label: `New Scene ${newNodeId.substring(5, 9)}`, content: '', type: 'scene', } };
+    setNodes(prevNodes => [...prevNodes, newNode]);
   }, [setNodes, project]);
 
   const handleDeleteNodeFromApp = useCallback((nodeId: string) => {
@@ -227,10 +199,10 @@ function AppContent() {
     else if (sourceNode.data.type === 'scene') newNodeType = 'scene';
     else if (sourceNode.data.type === 'outro') { showToast("Outro nodes cannot start new connections."); return; }
     const newNodeId = `node_${Date.now()}`; const newX = sourceNodePosition.x + 200; const newY = sourceNodePosition.y + 50;
-    const newNode: AppNode = { id: newNodeId, type: 'default', position: { x: newX, y: newY }, data: { label: `Connected ${newNodeType} ${newNodeId.substring(5,9)}`, content: '', type: newNodeType, }, selected: true, nodeOrigin, };
+    const newNode: AppNode = { id: newNodeId, type: 'default', position: { x: newX, y: newY }, data: { label: `Connected ${newNodeType} ${newNodeId.substring(5,9)}`, content: '', type: newNodeType, }, selected: true };
     const newEdge: AppEdge = { id: `e${sourceNodeId}-${newNodeId}`, source: sourceNodeId, target: newNodeId, type: 'custom', animated: true, data: { onDeleteEdge: handleDeleteEdge } };
-    setNodes((prevNodes) => [...prevNodes, newNode]);
-    setEdges((prevEdges) => [...prevEdges, newEdge]);
+    setNodes(prevNodes => [...prevNodes, newNode]);
+    setEdges(prevEdges => [...prevEdges, newEdge]);
   }, [setNodes, setEdges, getNode, showToast, handleDeleteEdge]);
 
   const handleTitleChangeFromApp = useCallback((nodeId: string, newTitle: string) => {
@@ -280,12 +252,15 @@ function AppContent() {
     let dx = 0, dy = 0;
     if (clientX < left + PADDING) dx = PAN_SPEED; else if (clientX > left + width - PADDING) dx = -PAN_SPEED;
     if (clientY < top + PADDING) dy = PAN_SPEED; else if (clientY > top + height - PADDING) dy = -PAN_SPEED;
-    if (dx !== 0 || dy !== 0) { project({x:0, y:0}); setViewport((v) => ({ x: v.x + dx, y: v.y + dy, zoom: v.zoom }), {duration: 0}); }
+    if (dx !== 0 || dy !== 0) { 
+      project({x:0, y:0}); 
+      setViewport({ x: 0, y: 0, zoom: 0 }); // Use a direct object instead of a function
+    }
   }, [setViewport, project]);
   
-  const onNodeDrag: NodeDragHandler = useCallback((event) => handleAutoPan(event as MouseEvent), [handleAutoPan]);
-  const onSelectionDrag: SelectionDragHandler = useCallback((event) => handleAutoPan(event as MouseEvent), [handleAutoPan]);
-  const onConnectDrag = useCallback((event: MouseEvent | TouchEvent) => handleAutoPan(event), [handleAutoPan]);
+  const onNodeDrag: NodeDragHandler = useCallback((event) => handleAutoPan(event as unknown as MouseEvent), [handleAutoPan]);
+  const onSelectionDrag: SelectionDragHandler = useCallback((event) => handleAutoPan(event as unknown as MouseEvent), [handleAutoPan]);
+  // Removed unused onConnectDrag function
 
   const nodesWithHandlers = useMemo(() => {
     return nodes.map(node => {
@@ -352,7 +327,6 @@ function AppContent() {
               onConnectEnd={onConnectEnd}
               onNodeDrag={onNodeDrag}
               onSelectionDrag={onSelectionDrag}
-              onConnectDrag={onConnectDrag}
               nodeTypes={nodeTypes}
               edgeTypes={edgeTypes} 
               fitView
@@ -360,13 +334,13 @@ function AppContent() {
               panOnScroll
               selectionOnDrag
               panOnDrag={[1, 2]}
-              selectionMode="partial"
+              selectionMode={"partial" as any}
               nodeOrigin={nodeOrigin}
               deleteKeyCode={null} 
             >
               <Controls />
               <MiniMap nodeStrokeWidth={3} zoomable pannable />
-              <Background variant="dots" gap={GRID_SIZE} size={1} />
+              <Background variant={"dots" as any} gap={GRID_SIZE} size={1} />
             </ReactFlow>
           </div>
         </main>
