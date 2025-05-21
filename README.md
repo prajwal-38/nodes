@@ -2,7 +2,7 @@ its a node template, as suggested in description use it as you like...
 
 To see how it works :
 
-[Click Here]("https://lucidnodes.vercel.app")
+[Click Here](https://lucidnodes.vercel.app)
 
 To run it locally :
 
