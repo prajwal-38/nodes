@@ -287,7 +287,7 @@ const toastTimer = useRef<number | null>(null);
   return (
     <div className="app-container">
       {toastMessage && <div className="toast-notification">{toastMessage}</div>}
-      <header className="header">Storyboard OS MVP</header>
+      <header className="header">Storyboard</header>
       <div className="main-content">
         <aside className="sidebar">
           <nav className="nav-menu">
